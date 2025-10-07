@@ -1,158 +1,265 @@
 'use client';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
-import { useState } from 'react';
-import { mockGroups as userGroups } from '@/mocks/groupData';
-import { Song } from '@/app/components/SongCard';
-import { mockTopSongs as songs } from '@/mocks/songData';
-import { Trophy, TrendingUp } from 'lucide-react';
-import { SongRowCard } from '@/app/components/SongRowCard';
 
-interface HomePageProps {
-  songs: Song[];
-  userGroups: Array<{ id: string; name: string }>;
-  // groupDashboardData: GroupDashboardData[];
-  // onAddToGroup: (songId: string, groupId: string) => void;
-  // onViewGroup: (groupId: string) => void;
-}
+import React, { useState, useEffect } from 'react';
+import { Navigation } from '../components/Navigation';
+import { HomePage } from '../components/HomePage';
+import { CreateGroup } from '../components/CreateGrouop';
+import { JoinGroup } from '../components/JoinGroup';
+import { MyGroups } from '../components/MyGroups';
+import { GroupPage } from '../components/GroupPage';
+import { Song } from '../components/SongCard';
+import { mockTopSongs } from '@/mocks/songData';
+import { mockGroups } from '@/mocks/groupData';
+import { mockGroupData } from '@/mocks/groupDetailData';
 
-export default function Home() {
-  const [searchQuery, setSearchQuery] = useState<string>('');
+export default function App() {
+  const [currentPage, setCurrentPage] = useState('home');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groups, setGroups] = useState(mockGroups);
+  const [groupData, setGroupData] = useState(mockGroupData);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const data = async () => {
-    const response = await fetch('http://localhost:5000/api/playlists', {
-      method: 'GET',
-      credentials: 'include',
-    })
-      .then((res) => res.json())
-      .then((data) => console.log(data));
-    console.log('errorrrr', response);
-    return response;
+  // Update time every minute for dashboard
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const isAfter10PM = currentTime.getHours() >= 22;
+
+  // Generate dashboard data for groups
+  const generateGroupDashboardData = () => {
+    return groups.map((group) => {
+      // Mock voting data for each group
+      const mockVotingData = {
+        '1': {
+          leadingSong: {
+            id: '1',
+            title: 'Blinding Lights',
+            artist: 'The Weeknd',
+            coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+            votes: 8,
+          },
+          songOfTheDay: {
+            id: '1',
+            title: 'Blinding Lights',
+            artist: 'The Weeknd',
+            coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+            votes: 8,
+          },
+          totalVotes: 16,
+          songsCount: 3,
+        },
+        '2': {
+          leadingSong: {
+            id: '4',
+            title: 'Levitating',
+            artist: 'Dua Lipa',
+            coverUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop',
+            votes: 12,
+          },
+          songOfTheDay: {
+            id: '4',
+            title: 'Levitating',
+            artist: 'Dua Lipa',
+            coverUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop',
+            votes: 12,
+          },
+          totalVotes: 20,
+          songsCount: 4,
+        },
+        '3': {
+          leadingSong: {
+            id: '9',
+            title: 'Anti-Hero',
+            artist: 'Taylor Swift',
+            coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+            votes: 15,
+          },
+          songOfTheDay: {
+            id: '9',
+            title: 'Anti-Hero',
+            artist: 'Taylor Swift',
+            coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+            votes: 15,
+          },
+          totalVotes: 25,
+          songsCount: 5,
+        },
+      };
+
+      const data = mockVotingData[group.id as keyof typeof mockVotingData] || {
+        totalVotes: 0,
+        songsCount: 0,
+      };
+
+      return {
+        id: group.id,
+        name: group.name,
+        memberCount: group.memberCount,
+        votingEnds: '10:00 PM',
+        hasVotingEnded: isAfter10PM,
+        leadingSong: data.leadingSong,
+        songOfTheDay: data.songOfTheDay,
+        totalVotes: data.totalVotes,
+        songsCount: data.songsCount,
+      };
+    });
   };
-  console.log(data);
 
-  // Filter songs based on search query
-  const filteredSongs = songs.filter(
-    (song) =>
-      song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.album.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCreateGroup = (newGroupData: {
+    name: string;
+    description: string;
+    hasPassword: boolean;
+    password?: string;
+  }) => {
+    const newGroup = {
+      id: Date.now().toString(),
+      ...newGroupData,
+      memberCount: 1,
+      isOwner: true,
+      lastActivity: 'Just now',
+      code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+    };
 
-  // Split songs into top 10 and remaining
-  const top10Songs = filteredSongs.slice(0, 10);
-  const remaining10Songs = filteredSongs.slice(10, 20);
+    setGroups((prev) => [...prev, newGroup]);
+    setCurrentPage('my-groups');
+  };
+
+  const handleJoinGroup = (code: string, password?: string) => {
+    // Mock joining logic
+    const newGroup = {
+      id: Date.now().toString(),
+      name: `Group ${code}`,
+      description: 'Joined group',
+      memberCount: 5,
+      isOwner: false,
+      lastActivity: 'Just now',
+      code: code,
+    };
+
+    setGroups((prev) => [...prev, newGroup]);
+    setCurrentPage('my-groups');
+  };
+
+  const handleAddToGroups = (songId: string, groupIds: string[]) => {
+    // Mock add to groups logic - show a confirmation message
+    const song = mockTopSongs.find((s) => s.id === songId);
+    const selectedGroups = groups.filter((g) => groupIds.includes(g.id));
+
+    if (song && selectedGroups.length > 0) {
+      const groupNames = selectedGroups.map((g) => g.name).join(', ');
+      alert(`"${song.title}" by ${song.artist} has been added to: ${groupNames}!`);
+    }
+  };
+
+  const handleViewGroup = (groupId: string) => {
+    setSelectedGroupId(groupId);
+    setCurrentPage('group');
+  };
+
+  const handleVote = (songId: string) => {
+    setGroupData((prev) => ({
+      ...prev,
+      todaySongs: prev.todaySongs.map((song) =>
+        song.id === songId
+          ? {
+              ...song,
+              votes: song.votes + 1,
+              hasUserVoted: true,
+            }
+          : song
+      ),
+    }));
+  };
+
+  const handleAddSongToGroup = (songId: string) => {
+    const song = mockTopSongs.find((s) => s.id === songId);
+    if (song && groupData) {
+      const newSong = {
+        ...song,
+        addedBy: 'You',
+        votes: 0,
+        hasUserVoted: false,
+        addedAt: 'Just now',
+      };
+
+      setGroupData((prev) => ({
+        ...prev,
+        todaySongs: [...prev.todaySongs, newSong],
+      }));
+    }
+  };
+
+  const handleSearchSongs = (query: string): Song[] => {
+    return mockTopSongs.filter(
+      (song) =>
+        song.title.toLowerCase().includes(query.toLowerCase()) ||
+        song.artist.toLowerCase().includes(query.toLowerCase()) ||
+        song.album.toLowerCase().includes(query.toLowerCase())
+    );
+  };
+
+  const renderCurrentPage = () => {
+    if (selectedGroupId && currentPage === 'group') {
+      return (
+        <GroupPage
+          group={groupData}
+          topSongs={mockTopSongs}
+          onVote={handleVote}
+          onAddSong={handleAddSongToGroup}
+          onSearchSongs={handleSearchSongs}
+          onGoBack={() => {
+            setSelectedGroupId(null);
+            setCurrentPage('my-groups');
+          }}
+        />
+      );
+    }
+
+    switch (currentPage) {
+      case 'home':
+        return (
+          <HomePage
+            songs={mockTopSongs}
+            userGroups={groups}
+            groupDashboardData={generateGroupDashboardData()}
+            onAddToGroups={handleAddToGroups}
+            onViewGroup={handleViewGroup}
+          />
+        );
+      case 'create-group':
+        return <CreateGroup onCreateGroup={handleCreateGroup} />;
+      case 'join-group':
+        return <JoinGroup onJoinGroup={handleJoinGroup} />;
+      case 'my-groups':
+        return (
+          <MyGroups
+            groups={groups}
+            onSelectGroup={handleViewGroup}
+            onCreateGroup={() => setCurrentPage('create-group')}
+          />
+        );
+      default:
+        return (
+          <HomePage
+            songs={mockTopSongs}
+            userGroups={groups}
+            groupDashboardData={generateGroupDashboardData()}
+            onAddToGroups={handleAddToGroups}
+            onViewGroup={handleViewGroup}
+          />
+        );
+    }
+  };
+
   return (
-    <>
-      <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-        {/* Search Bar Section */}
-        <div className="mb-8">
-          <div className="max-w-2xl mx-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input
-                placeholder="Search for songs, artists, or albums..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-3 text-base"
-              />
-            </div>
-            {/* {searchQuery && (
-              <p className="text-sm text-muted-foreground mt-2 text-center">
-                {filteredSongs.length} result{filteredSongs.length !== 1 ? 's' : ''} found for "{searchQuery}"
-              </p>
-            )} */}
-          </div>
-        </div>
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1>{searchQuery ? 'Search Results' : 'Top 20 Weekly Songs'}</h1>
-              <p className="text-muted-foreground">
-                {searchQuery ? `Results for "${searchQuery}"` : 'Current Spotify weekly ranking'}
-              </p>
-            </div>
-
-            {/* <div className="flex items-center gap-4">
-              {userGroups.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Add songs to:</span>
-                  <Select defaultValue={userGroups[0]?.id}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {userGroups.map((group) => (
-                        <SelectItem key={group.id} value={group.id}>
-                          {group.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div> */}
-          </div>
-
-          {filteredSongs.length === 0 ? (
-            <div className="text-center py-12">
-              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-              <h3>No songs found</h3>
-              <p className="text-muted-foreground">Try searching with different keywords</p>
-              {searchQuery && (
-                <Button variant="outline" onClick={() => setSearchQuery('')} className="mt-4">
-                  Clear search
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-8">
-              <div>
-                {/* Top 10 Section */}
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Trophy className="h-5 w-5 text-yellow-500" />
-                    <h2>Top 10</h2>
-                    <span className="text-sm text-muted-foreground">Most popular tracks</span>
-                  </div>
-                  <div className="space-y-2">
-                    {top10Songs.map((song) => (
-                      <SongRowCard
-                        key={song.id}
-                        song={song}
-                        // onAddToGroup={handleAddToGroup}
-                        showAddButton={userGroups.length > 0}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Remaining 10 Section */}
-                {remaining10Songs.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-4">
-                      <TrendingUp className="h-5 w-5 text-blue-500" />
-                      <h2>Rising Tracks</h2>
-                      <span className="text-sm text-muted-foreground">Climbing the charts</span>
-                    </div>
-                    <div className="space-y-2">
-                      {remaining10Songs.map((song) => (
-                        <SongRowCard
-                          key={song.id}
-                          song={song}
-                          // onAddToGroup={handleAddToGroup}
-                          showAddButton={userGroups.length > 0}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+    <div className="min-h-screen bg-background">
+      <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+      {renderCurrentPage()}
+    </div>
   );
 }

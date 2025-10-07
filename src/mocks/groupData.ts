@@ -1,12 +1,3 @@
-// interface Group {
-//   id: string;
-//   name: string;
-//   description: string;
-//   memberCount: number;
-//   isOwner: boolean;
-//   lastActivity: string;
-//   code: string;
-// }
 export const mockGroups = [
   {
     id: '1',

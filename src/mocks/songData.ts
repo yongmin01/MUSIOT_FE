@@ -1,4 +1,4 @@
-import { Song } from '@/app/components/SongCard';
+import { Song } from '@/components/SongCard';
 
 export const mockTopSongs: Song[] = [
   {
