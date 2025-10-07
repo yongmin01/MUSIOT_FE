@@ -1,4 +1,7 @@
+'use client';
+
 import { useState } from 'react';
+import Image from 'next/image';
 import { Calendar, Trophy, Plus, Clock, Users } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -107,8 +110,10 @@ export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, o
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
-              <img
+              <Image
                 src={group.songOfTheDay.coverUrl}
+                width={80}
+                height={80}
                 alt={`${group.songOfTheDay.title} cover`}
                 className="w-20 h-20 rounded object-cover"
               />
@@ -126,7 +131,7 @@ export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, o
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2>Today's Songs</h2>
+            <h2>Today&apos;s Songs</h2>
             <p className="text-muted-foreground">
               {totalVotes} total votes • {group.todaySongs.length} songs
             </p>
@@ -145,7 +150,9 @@ export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, o
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Trophy className="h-12 w-12 text-muted-foreground mb-4" />
               <h3>No Songs Added Yet</h3>
-              <p className="text-muted-foreground text-center mb-6">Be the first to add a song for today's vote!</p>
+              <p className="text-muted-foreground text-center mb-6">
+                Be the first to add a song for today&apos;s vote!
+              </p>
               <Button onClick={() => setShowAddModal(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add First Song
@@ -180,8 +187,10 @@ export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, o
                 <Card key={winner.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src={winner.coverUrl}
+                        width={48}
+                        height={48}
                         alt={`${winner.title} cover`}
                         className="w-12 h-12 rounded object-cover"
                       />

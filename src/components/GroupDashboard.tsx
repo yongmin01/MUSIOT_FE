@@ -1,4 +1,7 @@
+'use client';
+
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { Clock, Trophy, TrendingUp, Users, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -102,8 +105,10 @@ export function GroupDashboard({ groups, onViewGroup }: GroupDashboardProps) {
               {(isAfter10PM ? group.songOfTheDay : group.leadingSong) ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <img
+                    <Image
                       src={(isAfter10PM ? group.songOfTheDay : group.leadingSong)!.coverUrl}
+                      width={48}
+                      height={48}
                       alt="Song cover"
                       className="w-12 h-12 rounded object-cover"
                     />

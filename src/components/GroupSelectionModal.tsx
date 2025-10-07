@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { Song } from './SongCard';
 import { Button } from './ui/button';

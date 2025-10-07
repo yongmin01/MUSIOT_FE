@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
@@ -78,7 +80,7 @@ export function AddSongModal({ isOpen, onClose, topSongs, onAddSong, onSearchSon
                 ) : searchQuery ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No results found for "{searchQuery}"</p>
+                    <p>No results found for &quot;{searchQuery}&quot;</p>
                     <p className="text-sm">Try searching with different keywords</p>
                   </div>
                 ) : (

@@ -1,7 +1,17 @@
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      Create Group Page
-    </div>
-  );
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { CreateGroup } from '@/components/CreateGroup';
+import { useAppState } from '../providers/app-state-provider';
+
+export default function CreateGroupRoute() {
+  const router = useRouter();
+  const { createGroup } = useAppState();
+
+  const handleCreateGroup = (data: Parameters<typeof createGroup>[0]) => {
+    createGroup(data);
+    router.push('/my-groups');
+  };
+
+  return <CreateGroup onCreateGroup={handleCreateGroup} />;
 }

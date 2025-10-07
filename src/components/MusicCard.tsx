@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { Play, Pause, Heart, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from './ui/button';

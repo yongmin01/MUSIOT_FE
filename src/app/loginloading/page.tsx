@@ -1,3 +1,3 @@
-export default function pate() {
+export default function LoginLoadingPage() {
   return <div>loading</div>;
 }
