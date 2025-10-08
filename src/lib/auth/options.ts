@@ -12,6 +12,11 @@ export const authOptions: NextAuthOptions = {
     SpotifyProvider({
       clientId: spotifyClientId,
       clientSecret: spotifyClientSecret,
+      authorization: {
+        params: {
+          scope: 'user-top-read',
+        },
+      },
     }),
   ],
   session: {

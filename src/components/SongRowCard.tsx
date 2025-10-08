@@ -1,15 +1,15 @@
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Plus, Play } from 'lucide-react';
-import { Song } from './SongCard';
+import type { Track } from '@/types/track';
+import Image from 'next/image';
 
 interface SongRowCardProps {
-  song: Song;
+  song: Track;
   onAddToGroup: (songId: string) => void;
-  showAddButton?: boolean;
 }
 
-export function SongRowCard({ song, onAddToGroup, showAddButton = true }: SongRowCardProps) {
+export function SongRowCard({ song, onAddToGroup }: SongRowCardProps) {
   const getRankDisplay = (rank: number) => {
     if (rank <= 3) {
       const colors = {
@@ -37,7 +37,13 @@ export function SongRowCard({ song, onAddToGroup, showAddButton = true }: SongRo
 
       {/* Album Cover */}
       <div className="relative shrink-0">
-        <img src={song.coverUrl} alt={`${song.title} cover`} className="w-16 h-16 rounded-lg object-cover" />
+        <Image
+          src={song.albumCoverUrl}
+          alt={`${song.title} cover`}
+          width={48}
+          height={48}
+          className="w-16 h-16 rounded-lg object-cover"
+        />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex items-center justify-center">
           <Play className="h-5 w-5 text-white" />
         </div>
@@ -48,11 +54,11 @@ export function SongRowCard({ song, onAddToGroup, showAddButton = true }: SongRo
         <h3 className="font-medium truncate" title={song.title}>
           {song.title}
         </h3>
-        <p className="text-sm text-muted-foreground truncate" title={song.artist}>
-          {song.artist}
+        <p className="text-sm text-muted-foreground truncate" title={song.artistName}>
+          {song.albumName}
         </p>
-        <p className="text-xs text-muted-foreground truncate" title={song.album}>
-          {song.album}
+        <p className="text-xs text-muted-foreground truncate" title={song.albumName}>
+          {song.albumName}
         </p>
       </div>
 
@@ -66,7 +72,7 @@ export function SongRowCard({ song, onAddToGroup, showAddButton = true }: SongRo
       )}
 
       {/* Action Button */}
-      {showAddButton && (
+      {
         <div className="shrink-0">
           <Button
             onClick={() => onAddToGroup(song.id)}
@@ -77,7 +83,7 @@ export function SongRowCard({ song, onAddToGroup, showAddButton = true }: SongRo
             Add
           </Button>
         </div>
-      )}
+      }
     </div>
   );
 }

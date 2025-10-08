@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search, TrendingUp, Trophy } from 'lucide-react';
-import { SongCard, Song } from './SongCard';
+import { SongCard } from './SongCard';
 import { SongRowCard } from './SongRowCard';
 import { GroupDashboard } from './GroupDashboard';
 import { GroupSelectionModal } from './GroupSelectionModal';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-
+import { useTopTracks } from '@/hooks/useTopTracks';
+import type { Track } from '@/types/track';
+import { mockTopSongs } from '@/mocks/songData';
 interface GroupDashboardData {
   id: string;
   name: string;
@@ -35,21 +37,27 @@ interface GroupDashboardData {
 }
 
 interface HomePageProps {
-  songs: Song[];
   userGroups: Array<{ id: string; name: string; memberCount?: number }>;
   groupDashboardData: GroupDashboardData[];
   onAddToGroups: (songId: string, groupIds: string[]) => void;
   onViewGroup: (groupId: string) => void;
 }
 
-export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups, onViewGroup }: HomePageProps) {
+export function HomePage({ userGroups, groupDashboardData, onAddToGroups, onViewGroup }: HomePageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [selectedSong, setSelectedSong] = useState<Track | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { tracks, loading, error } = useTopTracks();
+
+  const userTopTracks: Track[] = useMemo(() => tracks, [tracks]);
+
+  const useFallbackSongs = error !== null || (!loading && userTopTracks.length === 0);
+  const baseSongs = useFallbackSongs ? mockTopSongs : userTopTracks;
+  const isLoadingSpotify = loading && !useFallbackSongs;
 
   const handleOpenGroupSelection = (songId: string) => {
-    const song = songs.find((s) => s.id === songId);
+    const song = baseSongs.find((s) => s.id === songId);
     if (song) {
       setSelectedSong(song);
       setIsModalOpen(true);
@@ -61,11 +69,11 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
   };
 
   // Filter songs based on search query
-  const filteredSongs = songs.filter(
+  const filteredSongs = baseSongs.filter(
     (song) =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.album.toLowerCase().includes(searchQuery.toLowerCase())
+      song.artistName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      song.albumName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Split songs into top 10 and remaining
@@ -91,7 +99,7 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
           </div>
           {searchQuery && (
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              {filteredSongs.length} result{filteredSongs.length !== 1 ? 's' : ''} found for "{searchQuery}"
+              {filteredSongs.length} result{filteredSongs.length !== 1 ? 's' : ''} found for &quot;{searchQuery}&quot;
             </p>
           )}
         </div>
@@ -120,13 +128,23 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
 
         {filteredSongs.length === 0 ? (
           <div className="text-center py-12">
-            <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3>No songs found</h3>
-            <p className="text-muted-foreground">Try searching with different keywords</p>
-            {searchQuery && (
-              <Button variant="outline" onClick={() => setSearchQuery('')} className="mt-4">
-                Clear search
-              </Button>
+            {isLoadingSpotify ? (
+              <>
+                <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                <h3>Spotify Top Tracks 불러오는 중</h3>
+                <p className="text-muted-foreground">잠시만 기다려 주세요.</p>
+              </>
+            ) : (
+              <>
+                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <h3>No songs found</h3>
+                <p className="text-muted-foreground">Try searching with different keywords</p>
+                {searchQuery && (
+                  <Button variant="outline" onClick={() => setSearchQuery('')} className="mt-4">
+                    Clear search
+                  </Button>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -143,12 +161,7 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
                   </div>
                   <div className="space-y-2">
                     {top10Songs.map((song) => (
-                      <SongRowCard
-                        key={song.id}
-                        song={song}
-                        onAddToGroup={handleOpenGroupSelection}
-                        showAddButton={userGroups.length > 0}
-                      />
+                      <SongRowCard key={song.id} song={song} onAddToGroup={handleOpenGroupSelection} />
                     ))}
                   </div>
                 </div>
@@ -163,12 +176,7 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
                     </div>
                     <div className="space-y-2">
                       {remaining10Songs.map((song) => (
-                        <SongRowCard
-                          key={song.id}
-                          song={song}
-                          onAddToGroup={handleOpenGroupSelection}
-                          showAddButton={userGroups.length > 0}
-                        />
+                        <SongRowCard key={song.id} song={song} onAddToGroup={handleOpenGroupSelection} />
                       ))}
                     </div>
                   </div>
@@ -178,12 +186,7 @@ export function HomePage({ songs, userGroups, groupDashboardData, onAddToGroups,
               // Grid View (Original)
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {filteredSongs.map((song) => (
-                  <SongCard
-                    key={song.id}
-                    song={song}
-                    onAddToGroup={handleOpenGroupSelection}
-                    showAddButton={userGroups.length > 0}
-                  />
+                  <SongCard key={song.id} song={song} onAddToGroup={handleOpenGroupSelection} />
                 ))}
               </div>
             )}

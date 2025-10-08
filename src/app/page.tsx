@@ -90,7 +90,7 @@ export default function HomeRoute() {
           songsCount: mockData?.songsCount ?? 0,
         };
       }),
-    [groups, isAfter10PM],
+    [groups, isAfter10PM]
   );
 
   const handleAddToGroups = (songId: string, groupIds: string[]) => {
@@ -110,7 +110,6 @@ export default function HomeRoute() {
 
   return (
     <HomePage
-      songs={topSongs}
       userGroups={groups}
       groupDashboardData={groupDashboardData}
       onAddToGroups={handleAddToGroups}
