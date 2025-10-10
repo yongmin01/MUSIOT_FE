@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import '../styles/globals.css';
 import { AppStateProvider } from './providers/app-state-provider';
 import { Navigation } from '../components/Navigation';
+import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import AuthProvider from './providers/AuthProvider';
 
 const geistSans = Geist({
@@ -20,15 +22,20 @@ export const metadata: Metadata = {
   description: "Vote today's music with your friends",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = createServerComponentClient({ cookies });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   return (
     <html lang="ko">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider>
+        <AuthProvider session={session}>
           <AppStateProvider>
             <div className="min-h-screen bg-background">
               <Navigation />

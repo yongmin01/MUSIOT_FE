@@ -1,8 +1,8 @@
-import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
-import { authOptions } from '@/lib/auth/options';
 import type { Track } from '@/types/track';
 import type { SpotifyApiTrackItem, SpotifyTopTracksResponse } from '@/types/spotify';
+import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 const SPOTIFY_TOP_TRACKS_ENDPOINT =
   'https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=20';
@@ -33,13 +33,19 @@ const mapToTrack = (track: SpotifyApiTrackItem | null | undefined, index: number
 };
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
+  const supabase = createRouteHandlerClient({ cookies });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const accessToken = session?.provider_token;
+
+  if (!accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const res = await fetch(SPOTIFY_TOP_TRACKS_ENDPOINT, {
-    headers: { Authorization: `Bearer ${session.accessToken}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Track } from '@/types/track';
+import { useSessionContext } from '@supabase/auth-helpers-react';
 
 interface UseTopTracksResult {
   tracks: Track[];
@@ -8,13 +9,21 @@ interface UseTopTracksResult {
 }
 
 export function useTopTracks(): UseTopTracksResult {
+  const { session, isLoading } = useSessionContext();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let isCancelled = false;
+    if (isLoading) return;
+    if (!session?.provider_token) {
+      setTracks([]);
+      setLoading(false);
+      return;
+    }
 
+    let isCancelled = false;
+    setLoading(true);
     (async () => {
       try {
         const res = await fetch('/api/spotify/top-tracks', { cache: 'no-store' });
@@ -41,7 +50,7 @@ export function useTopTracks(): UseTopTracksResult {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [isLoading, session?.provider_token]);
 
   return { tracks, loading, error };
 }

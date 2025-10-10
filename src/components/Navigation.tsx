@@ -4,33 +4,38 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Music, Users, UserPlus, FolderOpen, LogIn, User } from 'lucide-react';
 import { Button } from './ui/button';
-import { signIn } from 'next-auth/react';
-import { useSession } from 'next-auth/react';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@radix-ui/react-avatar';
+import { useSessionContext, useSupabaseClient } from '@supabase/auth-helpers-react';
 
 export function Navigation() {
-  const { data: session, status } = useSession();
+  const { session, isLoading } = useSessionContext();
+  const supabase = useSupabaseClient();
   const [profileImage, setProfileImage] = useState<string | null>(null);
+
   useEffect(() => {
-    if (session?.accessToken) {
-      fetch('https://api.spotify.com/v1/me', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.images && data.images.length > 0) {
-            console.log('Spotify profile image URL:', data.images[0].url);
-            setProfileImage(data.images[0].url);
-          }
-        })
-        .catch((err) => console.error('Error fetching Spotify profile:', err));
-    } else {
-      console.log('No access token available');
+    const token = session?.provider_token;
+
+    if (!token) {
+      setProfileImage(null);
+      return;
     }
-  }, [session?.accessToken]);
+
+    fetch('https://api.spotify.com/v1/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.images) && data.images.length > 0) {
+          setProfileImage(data.images[0]?.url ?? null);
+        } else {
+          setProfileImage(null);
+        }
+      })
+      .catch((err) => console.error('Error fetching Spotify profile:', err));
+  }, [session?.provider_token]);
 
   const pathname = usePathname();
   const navItems = [
@@ -38,6 +43,20 @@ export function Navigation() {
     { href: '/join-group', label: 'Join Group', icon: Users },
     { href: '/my-groups', label: 'My Groups', icon: FolderOpen },
   ];
+
+  const displayNameInitial = useMemo(() => {
+    const fallback = session?.user?.user_metadata?.full_name ?? session?.user?.email ?? '';
+    return fallback ? (fallback[0]?.toUpperCase() ?? '') : '';
+  }, [session?.user?.email, session?.user?.user_metadata?.full_name]);
+
+  const handleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'spotify',
+      options: {
+        scopes: 'user-top-read',
+      },
+    });
+  };
 
   return (
     <header className="border-b bg-card px-6 py-4">
@@ -65,8 +84,15 @@ export function Navigation() {
               </Button>
             );
           })}
-          {session && status === 'authenticated' ? (
-            <Button variant="ghost" className="flex items-center gap-2">
+          {session ? (
+            <Button
+              variant="ghost"
+              className="flex items-center gap-2"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setProfileImage(null);
+              }}
+            >
               <Avatar>
                 {profileImage && (
                   <AvatarImage
@@ -75,12 +101,12 @@ export function Navigation() {
                   />
                 )}
                 <AvatarFallback className="inline-flex h-8 w-8 select-none items-center justify-center overflow-hidden rounded-full align-middle bg-zinc-100">
-                  {session.user?.name ? session.user.name[0] : <User />}
+                  {displayNameInitial || <User />}
                 </AvatarFallback>
               </Avatar>
             </Button>
           ) : (
-            <Button variant="ghost" className="flex items-center gap-2" onClick={() => signIn('spotify')}>
+            <Button variant="ghost" className="flex items-center gap-2" disabled={isLoading} onClick={handleLogin}>
               <LogIn className="h-4 w-4" />
               Login
             </Button>
