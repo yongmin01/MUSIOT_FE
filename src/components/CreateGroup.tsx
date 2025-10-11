@@ -9,7 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Switch } from './ui/switch';
 
 interface CreateGroupProps {
-  onCreateGroup: (groupData: { name: string; description: string; hasPassword: boolean; password?: string }) => void;
+  onCreateGroup: (groupData: {
+    name: string;
+    description: string;
+    hasPassword: boolean;
+    password?: string;
+  }) => Promise<void>;
 }
 
 export function CreateGroup({ onCreateGroup }: CreateGroupProps) {
@@ -19,25 +24,40 @@ export function CreateGroup({ onCreateGroup }: CreateGroupProps) {
     hasPassword: false,
     password: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    setError(null);
 
-    onCreateGroup({
-      name: formData.name,
-      description: formData.description,
-      hasPassword: formData.hasPassword,
-      password: formData.hasPassword ? formData.password : undefined,
-    });
+    if (!formData.name.trim()) {
+      setError('그룹 이름을 입력해 주세요.');
+      return;
+    }
 
-    // Reset form
-    setFormData({
-      name: '',
-      description: '',
-      hasPassword: false,
-      password: '',
-    });
+    setIsSubmitting(true);
+
+    try {
+      await onCreateGroup({
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        hasPassword: formData.hasPassword,
+        password: formData.hasPassword ? formData.password : undefined,
+      });
+
+      setFormData({
+        name: '',
+        description: '',
+        hasPassword: false,
+        password: '',
+      });
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : '그룹을 생성할 수 없습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -102,8 +122,10 @@ export function CreateGroup({ onCreateGroup }: CreateGroupProps) {
               </div>
             )}
 
-            <Button type="submit" className="w-full">
-              Create Group
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create Group'}
             </Button>
           </form>
         </CardContent>

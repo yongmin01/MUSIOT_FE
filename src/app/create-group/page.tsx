@@ -8,8 +8,8 @@ export default function CreateGroupRoute() {
   const router = useRouter();
   const { createGroup } = useAppState();
 
-  const handleCreateGroup = (data: Parameters<typeof createGroup>[0]) => {
-    createGroup(data);
+  const handleCreateGroup = async (data: Parameters<typeof createGroup>[0]) => {
+    await createGroup(data);
     router.push('/my-groups');
   };
 

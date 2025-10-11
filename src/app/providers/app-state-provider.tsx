@@ -1,10 +1,9 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { Song } from '@/components/SongCard';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { Track } from '@/types/track';
 import { mockTopSongs } from '@/mocks/songData';
-import { mockGroups } from '@/mocks/groupData';
-import { mockGroupData } from '@/mocks/groupDetailData';
+import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
 
 export interface GroupSummary {
   id: string;
@@ -64,29 +63,18 @@ export interface CreateGroupInput {
 }
 
 interface AppStateContextValue {
-  topSongs: Song[];
+  topSongs: Track[];
   groups: GroupSummary[];
   getGroupDetail: (groupId: string) => GroupDetail | null;
-  createGroup: (data: CreateGroupInput) => string;
-  joinGroup: (code: string, password?: string) => string;
+  createGroup: (data: CreateGroupInput) => Promise<string>;
+  joinGroup: (code: string, password?: string) => Promise<string>;
   addSongToGroup: (groupId: string, songId: string) => void;
   addSongToGroups: (songId: string, groupIds: string[]) => void;
   voteForSong: (groupId: string, songId: string) => void;
-  searchSongs: (query: string) => Song[];
+  searchSongs: (query: string) => Track[];
 }
 
 const AppStateContext = createContext<AppStateContextValue | undefined>(undefined);
-
-const cloneDetail = (): GroupDetail => ({
-  id: mockGroupData.id,
-  name: mockGroupData.name,
-  memberCount: mockGroupData.memberCount,
-  votingEnds: mockGroupData.votingEnds,
-  hasVotingEnded: mockGroupData.hasVotingEnded,
-  todaySongs: mockGroupData.todaySongs.map((song) => ({ ...song })),
-  songOfTheDay: mockGroupData.songOfTheDay ? { ...mockGroupData.songOfTheDay } : undefined,
-  history: mockGroupData.history.map((item) => ({ ...item })),
-});
 
 const createEmptyDetail = (group: GroupSummary): GroupDetail => ({
   id: group.id,
@@ -98,19 +86,84 @@ const createEmptyDetail = (group: GroupSummary): GroupDetail => ({
   history: [],
 });
 
-const buildInitialDetails = (groups: GroupSummary[]): Record<string, GroupDetail> => {
-  return groups.reduce<Record<string, GroupDetail>>((acc, group) => {
-    acc[group.id] = group.id === mockGroupData.id ? cloneDetail() : createEmptyDetail(group);
-    return acc;
-  }, {});
-};
-
-const initialGroups: GroupSummary[] = mockGroups.map((group) => ({ ...group }));
-
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [topSongs] = useState<Song[]>(() => [...mockTopSongs]);
-  const [groups, setGroups] = useState<GroupSummary[]>(() => initialGroups);
-  const [groupDetails, setGroupDetails] = useState<Record<string, GroupDetail>>(() => buildInitialDetails(initialGroups));
+  const [topSongs] = useState<Track[]>(() => [...mockTopSongs]);
+  const [groups, setGroups] = useState<GroupSummary[]>(() => []);
+  const [groupDetails, setGroupDetails] = useState<Record<string, GroupDetail>>(() => ({}));
+  const supabase = useSupabaseClient();
+  const { session } = useSessionContext();
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      setGroups([]);
+      setGroupDetails({});
+      return;
+    }
+
+    const loadGroups = async () => {
+      const { data, error } = await supabase
+        .from('group_members')
+        .select(
+          `
+            group_id,
+            role,
+            groups (
+              id,
+              name,
+              description,
+              join_code,
+              requires_password,
+              owner_id,
+              created_at,
+              updated_at
+            )
+          `
+        )
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Failed to load groups', error);
+        return;
+      }
+
+      const summaries = (data ?? [])
+        .map((membership) => {
+          const group = membership.groups;
+          if (!group) {
+            return null;
+          }
+
+          const isOwner = group.owner_id === userId || membership.role === 'owner';
+
+          const summary: GroupSummary = {
+            id: group.id,
+            name: group.name ?? '',
+            description: group.description ?? '',
+            memberCount: 1,
+            isOwner,
+            lastActivity: new Date(group.updated_at ?? group.created_at ?? Date.now()).toISOString(),
+            code: group.join_code,
+            hasPassword: group.requires_password ?? false,
+          };
+
+          return summary;
+        })
+        .filter((value): value is GroupSummary => Boolean(value));
+
+      setGroups(summaries);
+      setGroupDetails((prev) => {
+        const next: Record<string, GroupDetail> = {};
+        summaries.forEach((group) => {
+          next[group.id] = prev[group.id] ?? createEmptyDetail(group);
+        });
+        return next;
+      });
+    };
+
+    void loadGroups();
+  }, [session?.user?.id, supabase]);
 
   const getGroupDetail = useCallback(
     (groupId: string) => {
@@ -126,67 +179,124 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         songOfTheDay: detail.songOfTheDay ? { ...detail.songOfTheDay } : undefined,
       };
     },
-    [groupDetails],
+    [groupDetails]
   );
 
   const createGroup = useCallback(
-    (data: CreateGroupInput) => {
-      const id = Date.now().toString();
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    async (data: CreateGroupInput) => {
+      const description = data.description?.trim();
+
+      const { data: result, error } = await supabase.rpc('create_group', {
+        p_name: data.name,
+        p_description: description ? description : null,
+        p_requires_password: data.hasPassword,
+        p_password: data.hasPassword ? (data.password ?? null) : null,
+      });
+
+      if (error) {
+        const message = error.message ?? 'Failed to create group';
+        throw new Error(message.includes('duplicate key value') ? '이미 사용 중인 그룹 코드입니다.' : message);
+      }
+
+      const groupRow = Array.isArray(result) ? result[0] : result;
+
+      if (!groupRow) {
+        throw new Error('Group creation returned no data');
+      }
+
       const newGroup: GroupSummary = {
-        id,
-        name: data.name,
-        description: data.description,
+        id: groupRow.id,
+        name: groupRow.name,
+        description: groupRow.description ?? '',
         memberCount: 1,
-        isOwner: true,
-        lastActivity: 'Just now',
-        code,
-        hasPassword: data.hasPassword,
+        isOwner: groupRow.owner_id === session?.user?.id,
+        lastActivity: new Date(groupRow.created_at ?? Date.now()).toISOString(),
+        code: groupRow.join_code,
+        hasPassword: groupRow.requires_password ?? false,
       };
 
-      setGroups((prev) => [...prev, newGroup]);
+      setGroups((prev) => {
+        if (prev.some((item) => item.id === newGroup.id)) {
+          return prev.map((item) => (item.id === newGroup.id ? newGroup : item));
+        }
+        return [...prev, newGroup];
+      });
+
       setGroupDetails((prev) => ({
         ...prev,
-        [id]: {
-          id,
-          name: data.name,
-          memberCount: 1,
-          votingEnds: '10:00 PM',
-          hasVotingEnded: false,
-          todaySongs: [],
-          history: [],
-        },
+        [newGroup.id]: createEmptyDetail(newGroup),
       }));
 
-      return id;
+      return newGroup.id;
     },
-    [],
+    [session?.user?.id, supabase]
   );
 
   const joinGroup = useCallback(
-    (code: string, _password?: string) => {
-      const id = Date.now().toString();
-      const name = `Group ${code.toUpperCase()}`;
+    async (code: string, password?: string) => {
+      const trimmedCode = code.trim();
+      if (!trimmedCode) {
+        throw new Error('사용할 수 없는 그룹 코드입니다.');
+      }
 
-      const newGroup: GroupSummary = {
-        id,
-        name,
-        description: 'Joined group',
-        memberCount: 5,
-        isOwner: false,
-        lastActivity: 'Just now',
-        code,
+      const isAlreadyMember = groups.some((group) => group.code?.toUpperCase() === trimmedCode.toUpperCase());
+      if (isAlreadyMember) {
+        throw new Error('이미 가입한 그룹입니다.');
+      }
+
+      const { data: result, error } = await supabase.rpc('join_group', {
+        p_join_code: trimmedCode,
+        p_password: password ?? null,
+      });
+
+      if (error) {
+        const message = error.message ?? 'Failed to join group';
+        if (message.includes('GROUP_NOT_FOUND')) {
+          throw new Error('존재하지 않는 그룹 코드입니다.');
+        }
+        if (message.includes('INVALID_PASSWORD')) {
+          throw new Error('그룹 비밀번호가 일치하지 않습니다.');
+        }
+        throw new Error(message);
+      }
+
+      const groupRow = Array.isArray(result) ? result[0] : result;
+
+      if (!groupRow) {
+        throw new Error('그룹 정보를 찾을 수 없습니다.');
+      }
+
+      const joinedGroup: GroupSummary = {
+        id: groupRow.id,
+        name: groupRow.name,
+        description: groupRow.description ?? '',
+        memberCount: 1,
+        isOwner: groupRow.owner_id === session?.user?.id,
+        lastActivity: new Date(groupRow.updated_at ?? groupRow.created_at ?? Date.now()).toISOString(),
+        code: groupRow.join_code,
+        hasPassword: groupRow.requires_password ?? false,
       };
 
-      setGroups((prev) => [...prev, newGroup]);
-      setGroupDetails((prev) => ({
-        ...prev,
-        [id]: createEmptyDetail(newGroup),
-      }));
+      setGroups((prev) => {
+        if (prev.some((group) => group.id === joinedGroup.id)) {
+          return prev.map((group) => (group.id === joinedGroup.id ? joinedGroup : group));
+        }
+        return [...prev, joinedGroup];
+      });
 
-      return id;
+      setGroupDetails((prev) => {
+        if (prev[joinedGroup.id]) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [joinedGroup.id]: createEmptyDetail(joinedGroup),
+        };
+      });
+
+      return joinedGroup.id;
     },
-    [],
+    [groups, session?.user?.id, supabase]
   );
 
   const addSongToGroup = useCallback(
@@ -227,7 +337,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return { ...prev, [groupId]: updatedDetail };
       });
     },
-    [topSongs],
+    [topSongs]
   );
 
   const addSongToGroups = useCallback(
@@ -282,7 +392,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return nextState;
       });
     },
-    [groups, topSongs],
+    [groups, topSongs]
   );
 
   const voteForSong = useCallback((groupId: string, songId: string) => {
@@ -295,7 +405,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const updatedDetail: GroupDetail = {
         ...detail,
         todaySongs: detail.todaySongs.map((song) =>
-          song.id === songId ? { ...song, votes: song.votes + 1, hasUserVoted: true } : song,
+          song.id === songId ? { ...song, votes: song.votes + 1, hasUserVoted: true } : song
         ),
       };
 
@@ -314,10 +424,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         (song) =>
           song.title.toLowerCase().includes(normalized) ||
           song.artist.toLowerCase().includes(normalized) ||
-          song.album.toLowerCase().includes(normalized),
+          song.album.toLowerCase().includes(normalized)
       );
     },
-    [topSongs],
+    [topSongs]
   );
 
   const value = useMemo<AppStateContextValue>(
@@ -332,7 +442,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       voteForSong,
       searchSongs,
     }),
-    [topSongs, groups, getGroupDetail, createGroup, joinGroup, addSongToGroup, addSongToGroups, voteForSong, searchSongs],
+    [
+      topSongs,
+      groups,
+      getGroupDetail,
+      createGroup,
+      joinGroup,
+      addSongToGroup,
+      addSongToGroups,
+      voteForSong,
+      searchSongs,
+    ]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

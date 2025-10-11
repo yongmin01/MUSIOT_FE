@@ -8,8 +8,8 @@ export default function JoinGroupRoute() {
   const router = useRouter();
   const { joinGroup } = useAppState();
 
-  const handleJoinGroup = (code: string, password?: string) => {
-    joinGroup(code, password);
+  const handleJoinGroup = async (code: string, password?: string) => {
+    await joinGroup(code, password);
     router.push('/my-groups');
   };
 

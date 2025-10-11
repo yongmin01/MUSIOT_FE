@@ -8,32 +8,48 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Separator } from './ui/separator';
 
 interface JoinGroupProps {
-  onJoinGroup: (code: string, password?: string) => void;
+  onJoinGroup: (code: string, password?: string) => Promise<void>;
 }
 
 export function JoinGroup({ onJoinGroup }: JoinGroupProps) {
   const [groupCode, setGroupCode] = useState('');
   const [password, setPassword] = useState('');
   const [showPasswordField, setShowPasswordField] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!groupCode.trim()) return;
+    setError(null);
 
-    onJoinGroup(groupCode, password || undefined);
+    if (!groupCode.trim()) {
+      setError('그룹 코드를 입력해 주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await onJoinGroup(groupCode.trim(), password || undefined);
+      setGroupCode('');
+      setPassword('');
+      setShowPasswordField(false);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : '그룹에 참여할 수 없습니다.';
+      setError(message);
+      if (message.toLowerCase().includes('password')) {
+        setShowPasswordField(true);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCodeCheck = () => {
     if (!groupCode.trim()) return;
 
-    // Simulate checking if group requires password
-    // In real app, this would be an API call
-    const requiresPassword = groupCode.toLowerCase().includes('private');
-    setShowPasswordField(requiresPassword);
-
-    if (!requiresPassword) {
-      onJoinGroup(groupCode);
-    }
+    setShowPasswordField(true);
   };
 
   return (
@@ -59,7 +75,7 @@ export function JoinGroup({ onJoinGroup }: JoinGroupProps) {
                   onChange={(e) => setGroupCode(e.target.value)}
                   required
                 />
-                <Button type="button" variant="outline" onClick={handleCodeCheck}>
+                <Button type="button" variant="outline" onClick={handleCodeCheck} disabled={isSubmitting}>
                   Check
                 </Button>
               </div>
@@ -74,13 +90,14 @@ export function JoinGroup({ onJoinGroup }: JoinGroupProps) {
                   placeholder="Enter group password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
                 />
               </div>
             )}
 
-            <Button type="submit" className="w-full">
-              Join Group
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? 'Joining...' : 'Join Group'}
             </Button>
           </form>
 
