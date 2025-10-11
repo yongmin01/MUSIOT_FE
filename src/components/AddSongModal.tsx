@@ -6,21 +6,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { SongCard, Song } from './SongCard';
+import { SongCard } from './SongCard';
 import { ScrollArea } from './ui/scroll-area';
+import type { Track } from '@/types/track';
+import { useAppState } from '@/app/providers/app-state-provider';
 
 interface AddSongModalProps {
   isOpen: boolean;
   onClose: () => void;
-  topSongs: Song[];
   onAddSong: (songId: string) => void;
-  onSearchSongs: (query: string) => Song[];
+  onSearchSongs: (query: string) => Track[];
 }
 
-export function AddSongModal({ isOpen, onClose, topSongs, onAddSong, onSearchSongs }: AddSongModalProps) {
+export function AddSongModal({ isOpen, onClose, onAddSong, onSearchSongs }: AddSongModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Song[]>([]);
-
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const { topSongs } = useAppState();
   const handleSearch = () => {
     if (searchQuery.trim()) {
       const results = onSearchSongs(searchQuery);

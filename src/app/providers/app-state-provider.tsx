@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Track } from '@/types/track';
-import { mockTopSongs } from '@/mocks/songData';
 import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
+import { useTopTracks } from '@/hooks/useTopTracks';
 
 export interface GroupSummary {
   id: string;
@@ -64,6 +64,8 @@ export interface CreateGroupInput {
 
 interface AppStateContextValue {
   topSongs: Track[];
+  topSongsLoading: boolean;
+  topSongsError: Error | null;
   groups: GroupSummary[];
   getGroupDetail: (groupId: string) => GroupDetail | null;
   createGroup: (data: CreateGroupInput) => Promise<string>;
@@ -87,11 +89,29 @@ const createEmptyDetail = (group: GroupSummary): GroupDetail => ({
 });
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [topSongs] = useState<Track[]>(() => [...mockTopSongs]);
+  const { tracks: fetchedTopTracks, loading: topTracksLoading, error: topTracksError } = useTopTracks();
+  const [topSongs, setTopSongs] = useState<Track[]>([]);
   const [groups, setGroups] = useState<GroupSummary[]>(() => []);
   const [groupDetails, setGroupDetails] = useState<Record<string, GroupDetail>>(() => ({}));
   const supabase = useSupabaseClient();
   const { session } = useSessionContext();
+
+  useEffect(() => {
+    if (topTracksError) {
+      console.error('Failed to load Spotify top tracks', topTracksError);
+      return;
+    }
+
+    if (topTracksLoading) {
+      return;
+    }
+
+    if (fetchedTopTracks.length > 0) {
+      setTopSongs(fetchedTopTracks);
+    } else {
+      console.log('No Top Tracks found');
+    }
+  }, [fetchedTopTracks, topTracksError, topTracksLoading]);
 
   useEffect(() => {
     const userId = session?.user?.id;
@@ -323,9 +343,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             {
               id: song.id,
               title: song.title,
-              artist: song.artist,
-              album: song.album,
-              coverUrl: song.coverUrl,
+              artist: song.artistName,
+              album: song.albumName,
+              coverUrl: song.albumCoverUrl,
               addedBy: 'You',
               votes: 0,
               hasUserVoted: false,
@@ -375,9 +395,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               {
                 id: song.id,
                 title: song.title,
-                artist: song.artist,
-                album: song.album,
-                coverUrl: song.coverUrl,
+                artist: song.artistName,
+                album: song.albumName,
+                coverUrl: song.albumCoverUrl,
                 addedBy: 'You',
                 votes: 0,
                 hasUserVoted: false,
@@ -423,8 +443,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return topSongs.filter(
         (song) =>
           song.title.toLowerCase().includes(normalized) ||
-          song.artist.toLowerCase().includes(normalized) ||
-          song.album.toLowerCase().includes(normalized)
+          song.artistName.toLowerCase().includes(normalized) ||
+          song.albumName.toLowerCase().includes(normalized)
       );
     },
     [topSongs]
@@ -433,6 +453,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppStateContextValue>(
     () => ({
       topSongs,
+      topSongsLoading: topTracksLoading,
+      topSongsError: topTracksError,
       groups,
       getGroupDetail,
       createGroup,
@@ -444,6 +466,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       topSongs,
+      topTracksLoading,
+      topTracksError,
       groups,
       getGroupDetail,
       createGroup,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Search, TrendingUp, Trophy } from 'lucide-react';
 import { SongCard } from './SongCard';
 import { SongRowCard } from './SongRowCard';
@@ -9,9 +9,8 @@ import { GroupSelectionModal } from './GroupSelectionModal';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-import { useTopTracks } from '@/hooks/useTopTracks';
 import type { Track } from '@/types/track';
-import { mockTopSongs } from '@/mocks/songData';
+
 interface GroupDashboardData {
   id: string;
   name: string;
@@ -39,22 +38,30 @@ interface GroupDashboardData {
 interface HomePageProps {
   userGroups: Array<{ id: string; name: string; memberCount?: number }>;
   groupDashboardData: GroupDashboardData[];
+  topSongs: Track[];
+  topSongsLoading: boolean;
+  topSongsError: Error | null;
   onAddToGroups: (songId: string, groupIds: string[]) => void;
   onViewGroup: (groupId: string) => void;
 }
 
-export function HomePage({ userGroups, groupDashboardData, onAddToGroups, onViewGroup }: HomePageProps) {
+export function HomePage({
+  userGroups,
+  groupDashboardData,
+  topSongs,
+  topSongsLoading,
+  topSongsError,
+  onAddToGroups,
+  onViewGroup,
+}: HomePageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedSong, setSelectedSong] = useState<Track | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { tracks, loading, error } = useTopTracks();
 
-  const userTopTracks: Track[] = useMemo(() => tracks, [tracks]);
-
-  const useFallbackSongs = error !== null || (!loading && userTopTracks.length === 0);
-  const baseSongs = useFallbackSongs ? mockTopSongs : userTopTracks;
-  const isLoadingSpotify = loading && !useFallbackSongs;
+  const useFallbackSongs = topSongsError !== null || (!topSongsLoading && topSongs.length === 0);
+  const baseSongs = topSongs;
+  const isLoadingSpotify = topSongsLoading && !useFallbackSongs;
 
   const handleOpenGroupSelection = (songId: string) => {
     const song = baseSongs.find((s) => s.id === songId);
@@ -77,8 +84,8 @@ export function HomePage({ userGroups, groupDashboardData, onAddToGroups, onView
   );
 
   // Split songs into top 10 and remaining
-  const top10Songs = filteredSongs.slice(0, 10);
-  const remaining10Songs = filteredSongs.slice(10, 20);
+  const top10Songs = baseSongs.length >= 10 ? baseSongs.slice(0, 10) : baseSongs;
+  const remaining10Songs = baseSongs.length >= 20 ? baseSongs.slice(10, 20) : [];
 
   return (
     <div className="container mx-auto p-6">

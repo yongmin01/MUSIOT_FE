@@ -64,7 +64,7 @@ const MOCK_VOTING_DATA = {
 
 export default function HomeRoute() {
   const router = useRouter();
-  const { topSongs, groups, addSongToGroups } = useAppState();
+  const { topSongs, topSongsLoading, topSongsError, groups, addSongToGroups } = useAppState();
   const [currentTime, setCurrentTime] = useState(() => new Date());
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function HomeRoute() {
 
     if (song && selectedGroups.length > 0) {
       const groupNames = selectedGroups.map((group) => group.name).join(', ');
-      window.alert(`"${song.title}" by ${song.artist} has been added to: ${groupNames}!`);
+      window.alert(`"${song.title}" by ${song.artistName} has been added to: ${groupNames}!`);
     }
   };
 
@@ -112,6 +112,9 @@ export default function HomeRoute() {
     <HomePage
       userGroups={groups}
       groupDashboardData={groupDashboardData}
+      topSongs={topSongs}
+      topSongsLoading={topSongsLoading}
+      topSongsError={topSongsError}
       onAddToGroups={handleAddToGroups}
       onViewGroup={handleViewGroup}
     />

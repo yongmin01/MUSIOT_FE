@@ -9,7 +9,7 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { GroupSongCard } from './GroupSongCard';
 import { AddSongModal } from './AddSongModal';
-import { Song } from './SongCard';
+import type { Track } from '@/types/track';
 
 interface GroupSong {
   id: string;
@@ -45,14 +45,14 @@ interface GroupData {
 
 interface GroupPageProps {
   group: GroupData;
-  topSongs: Song[];
+  topSongs: Track[];
   onVote: (songId: string) => void;
   onAddSong: (songId: string) => void;
-  onSearchSongs: (query: string) => Song[];
+  onSearchSongs: (query: string) => Track[];
   onGoBack: () => void;
 }
 
-export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, onGoBack }: GroupPageProps) {
+export function GroupPage({ group, onVote, onAddSong, onSearchSongs, onGoBack }: GroupPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
 
   const totalVotes = group.todaySongs.reduce((sum, song) => sum + song.votes, 0);
@@ -217,7 +217,6 @@ export function GroupPage({ group, topSongs, onVote, onAddSong, onSearchSongs, o
       <AddSongModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        topSongs={topSongs}
         onAddSong={onAddSong}
         onSearchSongs={onSearchSongs}
       />
