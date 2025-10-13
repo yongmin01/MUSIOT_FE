@@ -203,14 +203,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const { count: memberCount, error: memberCountError } = await supabase
-          .from('group_members')
-          .select('user_id', { count: 'exact', head: true })
-          .eq('group_id', groupId);
+        const { data: memberCountData, error: memberCountError } = await supabase.rpc('get_group_member_count', {
+          p_group_id: groupId,
+        });
 
         if (memberCountError) {
           throw memberCountError;
         }
+
+        const memberCount =
+          typeof memberCountData === 'number' && Number.isFinite(memberCountData) ? memberCountData : null;
 
         const { data: roundData, error: roundError } = await supabase
           .from('group_vote_rounds')
@@ -271,7 +273,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             throw tracksError;
           }
 
-          roundTracksData = tracksData ?? [];
+          roundTracksData = (tracksData ?? []).map((track) => {
+            const rawTrackInfo = Array.isArray(track.tracks) ? track.tracks[0] : track.tracks;
+            const trackInfo = rawTrackInfo
+              ? {
+                  id: String(rawTrackInfo.id ?? ''),
+                  title: String(rawTrackInfo.title ?? ''),
+                  artist_name: String(rawTrackInfo.artist_name ?? ''),
+                  album_name: rawTrackInfo.album_name ?? null,
+                  artwork_url: rawTrackInfo.artwork_url ?? null,
+                }
+              : null;
+
+            return {
+              id: String(track.id ?? ''),
+              round_id: String(track.round_id ?? ''),
+              track_id: String(track.track_id ?? ''),
+              status: String(track.status ?? ''),
+              added_by: String(track.added_by ?? ''),
+              added_at: String(track.added_at ?? ''),
+              tracks: trackInfo,
+            };
+          });
         }
 
         let votesRows: { group_round_track_id: string; voter_id: string }[] = [];
@@ -466,39 +489,78 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       const summaries = (data ?? [])
         .map((membership) => {
-          const group = membership.groups;
-          if (!group) {
+          const rawGroup = Array.isArray(membership.groups) ? membership.groups[0] : membership.groups;
+          if (!rawGroup) {
             return null;
           }
 
-          const isOwner = group.owner_id === userId || membership.role === 'owner';
+          const group = {
+            id: String(rawGroup.id ?? ''),
+            name: String(rawGroup.name ?? ''),
+            description: rawGroup.description ?? '',
+            join_code: String(rawGroup.join_code ?? ''),
+            requires_password: Boolean(rawGroup.requires_password ?? false),
+            owner_id: String(rawGroup.owner_id ?? ''),
+            created_at: rawGroup.created_at ?? null,
+            updated_at: rawGroup.updated_at ?? null,
+          };
+
+          const membershipRole = String(membership.role ?? '');
+          const isOwner = group.owner_id === userId || membershipRole === 'owner';
 
           const summary: GroupSummary = {
             id: group.id,
-            name: group.name ?? '',
-            description: group.description ?? '',
+            name: group.name,
+            description: group.description,
             memberCount: 1,
             isOwner,
             lastActivity: new Date(group.updated_at ?? group.created_at ?? Date.now()).toISOString(),
             code: group.join_code,
-            hasPassword: group.requires_password ?? false,
+            hasPassword: group.requires_password,
           };
 
           return summary;
         })
         .filter((value): value is GroupSummary => Boolean(value));
 
-      setGroups(summaries);
-      groupsRef.current = summaries;
+      const groupsWithCounts = await Promise.all(
+        summaries.map(async (group) => {
+          try {
+            const { data: memberCountData, error: memberCountError } = await supabase.rpc(
+              'get_group_member_count',
+              {
+                p_group_id: group.id,
+              }
+            );
+
+            if (memberCountError) {
+              throw memberCountError;
+            }
+
+            const memberCount =
+              typeof memberCountData === 'number' && Number.isFinite(memberCountData)
+                ? memberCountData
+                : group.memberCount;
+
+            return { ...group, memberCount };
+          } catch (countError) {
+            console.warn('Failed to load member count for group', group.id, countError);
+            return group;
+          }
+        })
+      );
+
+      setGroups(groupsWithCounts);
+      groupsRef.current = groupsWithCounts;
       setGroupDetails((prev) => {
         const next: Record<string, GroupDetail> = {};
-        summaries.forEach((group) => {
+        groupsWithCounts.forEach((group) => {
           next[group.id] = prev[group.id] ?? createEmptyDetail(group);
         });
         return next;
       });
 
-      summaries.forEach((group) => {
+      groupsWithCounts.forEach((group) => {
         void refreshGroupDetail(group.id);
       });
     };
