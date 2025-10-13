@@ -93,8 +93,8 @@ export default function HomeRoute() {
     [groups, isAfter10PM]
   );
 
-  const handleAddToGroups = (songId: string, groupIds: string[]) => {
-    addSongToGroups(songId, groupIds);
+  const handleAddToGroups = async (songId: string, groupIds: string[]) => {
+    await addSongToGroups(songId, groupIds);
     const song = topSongs.find((entry) => entry.id === songId);
     const selectedGroups = groups.filter((group) => groupIds.includes(group.id));
 

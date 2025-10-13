@@ -14,14 +14,17 @@ import { useAppState } from '@/app/providers/app-state-provider';
 interface AddSongModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSong: (songId: string) => void;
+  onAddSong: (songId: string) => Promise<void> | void;
   onSearchSongs: (query: string) => Track[];
 }
 
 export function AddSongModal({ isOpen, onClose, onAddSong, onSearchSongs }: AddSongModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { topSongs } = useAppState();
+
   const handleSearch = () => {
     if (searchQuery.trim()) {
       const results = onSearchSongs(searchQuery);
@@ -29,17 +32,44 @@ export function AddSongModal({ isOpen, onClose, onAddSong, onSearchSongs }: AddS
     }
   };
 
-  const handleAddSong = (songId: string) => {
-    onAddSong(songId);
+  const resetState = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsSubmitting(false);
+    setError(null);
     onClose();
   };
 
+  const handleDialogChange = (open: boolean) => {
+    if (!open) {
+      resetState();
+    }
+  };
+
+  const handleAddSong = async (songId: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await onAddSong(songId);
+      resetState();
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : '곡을 추가하지 못했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>Add Song to Group</DialogTitle>
         </DialogHeader>
+
+        {error && <p className="text-sm text-destructive mb-3">{error}</p>}
 
         <Tabs defaultValue="browse" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -66,7 +96,7 @@ export function AddSongModal({ isOpen, onClose, onAddSong, onSearchSongs }: AddS
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 />
-                <Button onClick={handleSearch}>
+                <Button onClick={handleSearch} disabled={isSubmitting}>
                   <Search className="h-4 w-4" />
                 </Button>
               </div>

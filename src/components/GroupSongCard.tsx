@@ -3,22 +3,11 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-
-interface GroupSong {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  coverUrl: string;
-  addedBy: string;
-  votes: number;
-  hasUserVoted: boolean;
-  addedAt: string;
-}
+import type { GroupSong } from '@/app/providers/app-state-provider';
 
 interface GroupSongCardProps {
   song: GroupSong;
-  onVote: (songId: string) => void;
+  onVote: (roundTrackId: string) => Promise<void> | void;
   canVote: boolean;
   totalVotes: number;
 }
@@ -54,7 +43,10 @@ export function GroupSongCard({ song, onVote, canVote, totalVotes }: GroupSongCa
               <Badge variant={song.hasUserVoted ? 'default' : 'outline'}>{song.votes} votes</Badge>
               <Button
                 size="sm"
-                onClick={() => onVote(song.id)}
+                onClick={() => {
+                  if (!canVote) return;
+                  void onVote(song.id);
+                }}
                 disabled={!canVote}
                 variant={song.hasUserVoted ? 'default' : 'outline'}
               >

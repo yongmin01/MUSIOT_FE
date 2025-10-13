@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Track } from '@/types/track';
 import { useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react';
 import { useTopTracks } from '@/hooks/useTopTracks';
@@ -17,7 +17,8 @@ export interface GroupSummary {
 }
 
 export interface GroupSong {
-  id: string;
+  id: string; // group_round_track_id
+  trackId: string;
   title: string;
   artist: string;
   album: string;
@@ -30,6 +31,7 @@ export interface GroupSong {
 
 export interface GroupHistoryEntry {
   id: string;
+  trackId: string;
   title: string;
   artist: string;
   coverUrl: string;
@@ -41,11 +43,15 @@ export interface GroupDetail {
   id: string;
   name: string;
   memberCount: number;
-  votingEnds: string;
+  votingEnds: string | null;
   hasVotingEnded: boolean;
+  isVotingOpen: boolean;
+  roundId?: string | null;
+  status?: 'submission' | 'waiting_final' | 'closed' | null;
   todaySongs: GroupSong[];
   songOfTheDay?: {
     id: string;
+    trackId: string;
     title: string;
     artist: string;
     coverUrl: string;
@@ -68,11 +74,13 @@ interface AppStateContextValue {
   topSongsError: Error | null;
   groups: GroupSummary[];
   getGroupDetail: (groupId: string) => GroupDetail | null;
+  refreshGroupDetail: (groupId: string) => Promise<GroupDetail | null>;
+  isGroupLoading: (groupId: string) => boolean;
   createGroup: (data: CreateGroupInput) => Promise<string>;
   joinGroup: (code: string, password?: string) => Promise<string>;
-  addSongToGroup: (groupId: string, songId: string) => void;
-  addSongToGroups: (songId: string, groupIds: string[]) => void;
-  voteForSong: (groupId: string, songId: string) => void;
+  addSongToGroup: (groupId: string, songId: string) => Promise<void>;
+  addSongToGroups: (songId: string, groupIds: string[]) => Promise<void>;
+  voteForSong: (groupId: string, roundTrackId: string) => Promise<void>;
   searchSongs: (query: string) => Track[];
 }
 
@@ -82,8 +90,11 @@ const createEmptyDetail = (group: GroupSummary): GroupDetail => ({
   id: group.id,
   name: group.name,
   memberCount: group.memberCount,
-  votingEnds: '10:00 PM',
+  votingEnds: null,
   hasVotingEnded: false,
+  isVotingOpen: false,
+  roundId: null,
+  status: null,
   todaySongs: [],
   history: [],
 });
@@ -93,8 +104,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [topSongs, setTopSongs] = useState<Track[]>([]);
   const [groups, setGroups] = useState<GroupSummary[]>(() => []);
   const [groupDetails, setGroupDetails] = useState<Record<string, GroupDetail>>(() => ({}));
+  const [groupLoading, setGroupLoading] = useState<Record<string, boolean>>(() => ({}));
   const supabase = useSupabaseClient();
   const { session } = useSessionContext();
+  const groupsRef = useRef<GroupSummary[]>(groups);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   useEffect(() => {
     if (topTracksError) {
@@ -113,11 +130,310 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchedTopTracks, topTracksError, topTracksLoading]);
 
+  const getGroupDetail = useCallback(
+    (groupId: string) => {
+      const detail = groupDetails[groupId];
+      if (!detail) {
+        return null;
+      }
+
+      return {
+        ...detail,
+        todaySongs: detail.todaySongs.map((song) => ({ ...song })),
+        history: detail.history.map((entry) => ({ ...entry })),
+        songOfTheDay: detail.songOfTheDay ? { ...detail.songOfTheDay } : undefined,
+      };
+    },
+    [groupDetails]
+  );
+
+  const isGroupLoading = useCallback((groupId: string) => Boolean(groupLoading[groupId]), [groupLoading]);
+
+  const refreshGroupDetail = useCallback(
+    async (groupId: string) => {
+      const userId = session?.user?.id;
+      if (!userId) {
+        return null;
+      }
+
+      setGroupLoading((prev) => ({ ...prev, [groupId]: true }));
+
+      try {
+        // Ensure there is a round for the current day; ignore errors so refresh continues
+        const { error: ensureRoundError } = await supabase.rpc('ensure_group_round', { p_group_id: groupId });
+        if (ensureRoundError) {
+          console.warn('ensure_group_round failed', ensureRoundError);
+        }
+
+        const currentGroups = groupsRef.current;
+        let groupSummary = currentGroups.find((group) => group.id === groupId) ?? null;
+
+        if (!groupSummary) {
+          const { data: groupRow, error: groupFetchError } = await supabase
+            .from('groups')
+            .select('id, name, description, owner_id, join_code, requires_password, created_at, updated_at')
+            .eq('id', groupId)
+            .maybeSingle();
+
+          if (groupFetchError) {
+            throw groupFetchError;
+          }
+
+          if (groupRow) {
+            groupSummary = {
+              id: groupRow.id,
+              name: groupRow.name ?? '',
+              description: groupRow.description ?? '',
+              memberCount: 0,
+              isOwner: groupRow.owner_id === userId,
+              lastActivity: new Date(groupRow.updated_at ?? groupRow.created_at ?? new Date()).toISOString(),
+              code: groupRow.join_code,
+              hasPassword: groupRow.requires_password ?? false,
+            };
+
+            setGroups((prev) => {
+              if (prev.some((group) => group.id === groupId)) {
+                groupsRef.current = prev;
+                return prev;
+              }
+              const next = [...prev, groupSummary!];
+              groupsRef.current = next;
+              return next;
+            });
+          }
+        }
+
+        const { count: memberCount, error: memberCountError } = await supabase
+          .from('group_members')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('group_id', groupId);
+
+        if (memberCountError) {
+          throw memberCountError;
+        }
+
+        const { data: roundData, error: roundError } = await supabase
+          .from('group_vote_rounds')
+          .select(
+            'id, group_id, round_date, status, submission_start_at, submission_end_at, winner_group_track_id, winner_finalized_at'
+          )
+          .eq('group_id', groupId)
+          .order('round_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (roundError && roundError.code !== 'PGRST116') {
+          throw roundError;
+        }
+
+        const round = roundData ?? null;
+
+        let roundTracksData: Array<{
+          id: string;
+          round_id: string;
+          track_id: string;
+          status: string;
+          added_by: string;
+          added_at: string;
+          tracks: {
+            id: string;
+            title: string;
+            artist_name: string;
+            album_name: string | null;
+            artwork_url: string | null;
+          } | null;
+        }> = [];
+
+        if (round?.id) {
+          const { data: tracksData, error: tracksError } = await supabase
+            .from('group_round_tracks')
+            .select(
+              `
+                id,
+                round_id,
+                track_id,
+                status,
+                added_by,
+                added_at,
+                tracks (
+                  id,
+                  title,
+                  artist_name,
+                  album_name,
+                  artwork_url
+                )
+              `
+            )
+            .eq('round_id', round.id)
+            .order('added_at', { ascending: true });
+
+          if (tracksError) {
+            throw tracksError;
+          }
+
+          roundTracksData = tracksData ?? [];
+        }
+
+        let votesRows: { group_round_track_id: string; voter_id: string }[] = [];
+        if (round?.id) {
+          const { data: votesData, error: votesError } = await supabase
+            .from('group_votes')
+            .select('group_round_track_id, voter_id')
+            .eq('round_id', round.id);
+
+          if (votesError) {
+            throw votesError;
+          }
+
+          votesRows = votesData ?? [];
+        }
+
+        const { data: historyData, error: historyError } = await supabase
+          .from('group_recent_winners')
+          .select(
+            'group_id, round_id, group_round_track_id, track_id, title, artist_name, album_name, artwork_url, vote_count, finalized_at'
+          )
+          .eq('group_id', groupId)
+          .order('finalized_at', { ascending: false })
+          .limit(3);
+
+        if (historyError) {
+          throw historyError;
+        }
+
+        const voteCounts = new Map<string, number>();
+        const userVotes = new Set<string>();
+
+        votesRows.forEach((vote) => {
+          voteCounts.set(vote.group_round_track_id, (voteCounts.get(vote.group_round_track_id) ?? 0) + 1);
+          if (vote.voter_id === userId) {
+            userVotes.add(vote.group_round_track_id);
+          }
+        });
+
+        const songs: GroupSong[] = roundTracksData.map((item) => {
+          const trackInfo = Array.isArray(item.tracks) ? item.tracks[0] : item.tracks;
+
+          return {
+            id: item.id,
+            trackId: item.track_id,
+            title: trackInfo?.title ?? '',
+            artist: trackInfo?.artist_name ?? '',
+            album: trackInfo?.album_name ?? '',
+            coverUrl: trackInfo?.artwork_url ?? '',
+            addedBy: item.added_by === userId ? 'You' : '멤버',
+            votes: voteCounts.get(item.id) ?? 0,
+            hasUserVoted: userVotes.has(item.id),
+            addedAt: item.added_at
+              ? new Date(item.added_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+              : '',
+          };
+        });
+
+        const history: GroupHistoryEntry[] = (historyData ?? []).map((entry) => ({
+          id: entry.group_round_track_id,
+          trackId: entry.track_id,
+          title: entry.title ?? '',
+          artist: entry.artist_name ?? '',
+          coverUrl: entry.artwork_url ?? '',
+          votes: entry.vote_count ?? 0,
+          date: entry.finalized_at
+            ? new Date(entry.finalized_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+            : '',
+        }));
+
+        const winnerFromRound = songs.find((song) => song.id === round?.winner_group_track_id);
+        let songOfTheDay =
+          winnerFromRound ??
+          (history.length > 0
+            ? {
+                id: history[0].id,
+                trackId: history[0].trackId,
+                title: history[0].title,
+                artist: history[0].artist,
+                coverUrl: history[0].coverUrl,
+                votes: history[0].votes,
+                date: history[0].date,
+              }
+            : undefined);
+
+        if (winnerFromRound && round?.winner_finalized_at) {
+          songOfTheDay = {
+            id: winnerFromRound.id,
+            trackId: winnerFromRound.trackId,
+            title: winnerFromRound.title,
+            artist: winnerFromRound.artist,
+            coverUrl: winnerFromRound.coverUrl,
+            votes: winnerFromRound.votes,
+            date: new Date(round.winner_finalized_at).toLocaleDateString('ko-KR', {
+              month: 'short',
+              day: 'numeric',
+            }),
+          };
+        }
+
+        const votingEnds = round?.submission_end_at
+          ? new Date(round.submission_end_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+          : null;
+
+        const computedMemberCount = memberCount ?? groupSummary?.memberCount ?? 0;
+
+        const detail: GroupDetail = {
+          id: groupId,
+          name: groupSummary?.name ?? '',
+          memberCount: computedMemberCount,
+          votingEnds,
+          hasVotingEnded: round ? round.status !== 'submission' : true,
+          isVotingOpen: round ? round.status === 'submission' : false,
+          roundId: round?.id ?? null,
+          status: (round?.status as GroupDetail['status']) ?? null,
+          todaySongs: songs,
+          songOfTheDay,
+          history,
+        };
+
+        setGroupDetails((prev) => ({
+          ...prev,
+          [groupId]: detail,
+        }));
+
+        setGroups((prev) => {
+          let changed = false;
+          const next = prev.map((group) => {
+            if (group.id !== groupId) {
+              return group;
+            }
+
+            if (group.memberCount === computedMemberCount) {
+              return group;
+            }
+
+            changed = true;
+            return { ...group, memberCount: computedMemberCount };
+          });
+
+          const result = changed ? next : prev;
+          groupsRef.current = result;
+          return result;
+        });
+
+        return detail;
+      } catch (error) {
+        console.error('Failed to refresh group detail', error);
+        throw error;
+      } finally {
+        setGroupLoading((prev) => ({ ...prev, [groupId]: false }));
+      }
+    },
+    [session?.user?.id, supabase]
+  );
+
   useEffect(() => {
     const userId = session?.user?.id;
 
     if (!userId) {
       setGroups([]);
+      groupsRef.current = [];
       setGroupDetails({});
       return;
     }
@@ -173,6 +489,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         .filter((value): value is GroupSummary => Boolean(value));
 
       setGroups(summaries);
+      groupsRef.current = summaries;
       setGroupDetails((prev) => {
         const next: Record<string, GroupDetail> = {};
         summaries.forEach((group) => {
@@ -180,27 +497,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         });
         return next;
       });
+
+      summaries.forEach((group) => {
+        void refreshGroupDetail(group.id);
+      });
     };
 
     void loadGroups();
-  }, [session?.user?.id, supabase]);
-
-  const getGroupDetail = useCallback(
-    (groupId: string) => {
-      const detail = groupDetails[groupId];
-      if (!detail) {
-        return null;
-      }
-
-      return {
-        ...detail,
-        todaySongs: detail.todaySongs.map((song) => ({ ...song })),
-        history: detail.history.map((entry) => ({ ...entry })),
-        songOfTheDay: detail.songOfTheDay ? { ...detail.songOfTheDay } : undefined,
-      };
-    },
-    [groupDetails]
-  );
+  }, [refreshGroupDetail, session?.user?.id, supabase]);
 
   const createGroup = useCallback(
     async (data: CreateGroupInput) => {
@@ -237,9 +541,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       setGroups((prev) => {
         if (prev.some((item) => item.id === newGroup.id)) {
-          return prev.map((item) => (item.id === newGroup.id ? newGroup : item));
+          const next = prev.map((item) => (item.id === newGroup.id ? newGroup : item));
+          groupsRef.current = next;
+          return next;
         }
-        return [...prev, newGroup];
+        const next = [...prev, newGroup];
+        groupsRef.current = next;
+        return next;
       });
 
       setGroupDetails((prev) => ({
@@ -247,9 +555,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         [newGroup.id]: createEmptyDetail(newGroup),
       }));
 
+      await refreshGroupDetail(newGroup.id);
+
       return newGroup.id;
     },
-    [session?.user?.id, supabase]
+    [refreshGroupDetail, session?.user?.id, supabase]
   );
 
   const joinGroup = useCallback(
@@ -299,9 +609,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       setGroups((prev) => {
         if (prev.some((group) => group.id === joinedGroup.id)) {
-          return prev.map((group) => (group.id === joinedGroup.id ? joinedGroup : group));
+          const next = prev.map((group) => (group.id === joinedGroup.id ? joinedGroup : group));
+          groupsRef.current = next;
+          return next;
         }
-        return [...prev, joinedGroup];
+        const next = [...prev, joinedGroup];
+        groupsRef.current = next;
+        return next;
       });
 
       setGroupDetails((prev) => {
@@ -314,124 +628,92 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
+      await refreshGroupDetail(joinedGroup.id);
+
       return joinedGroup.id;
     },
-    [groups, session?.user?.id, supabase]
+    [groups, refreshGroupDetail, session?.user?.id, supabase]
   );
 
   const addSongToGroup = useCallback(
-    (groupId: string, songId: string) => {
-      setGroupDetails((prev) => {
-        const detail = prev[groupId];
-        if (!detail) {
-          return prev;
-        }
+    async (groupId: string, songId: string) => {
+      const track = topSongs.find((item) => item.id === songId);
+      if (!track) {
+        throw new Error('선택한 곡 정보를 찾을 수 없습니다.');
+      }
 
-        const song = topSongs.find((item) => item.id === songId);
-        if (!song) {
-          return prev;
-        }
-
-        if (detail.todaySongs.some((entry) => entry.id === songId)) {
-          return prev;
-        }
-
-        const updatedDetail: GroupDetail = {
-          ...detail,
-          todaySongs: [
-            ...detail.todaySongs,
-            {
-              id: song.id,
-              title: song.title,
-              artist: song.artistName,
-              album: song.albumName,
-              coverUrl: song.albumCoverUrl,
-              addedBy: 'You',
-              votes: 0,
-              hasUserVoted: false,
-              addedAt: 'Just now',
-            },
-          ],
-        };
-
-        return { ...prev, [groupId]: updatedDetail };
+      const { error } = await supabase.rpc('add_track_to_group', {
+        p_group_id: groupId,
+        p_spotify_track_id: track.id,
+        p_title: track.title,
+        p_artist_name: track.artistName,
+        p_album_name: track.albumName ?? null,
+        p_duration_ms: null,
+        p_artwork_url: track.albumCoverUrl ?? null,
+        p_release_year: track.releaseYear ?? null,
       });
+
+      if (error) {
+        const message = error.message ?? '곡을 추가할 수 없습니다.';
+        if (message.includes('TRACK_ALREADY_SUBMITTED')) {
+          throw new Error('이미 후보 목록에 있는 곡입니다.');
+        }
+        if (message.includes('SUBMISSION_CLOSED')) {
+          throw new Error('오늘은 곡 추가 시간이 마감되었습니다.');
+        }
+        if (message.includes('SUBMISSION_NOT_OPEN_YET')) {
+          throw new Error('아직 곡 제출 시간이 열리지 않았습니다.');
+        }
+        if (message.includes('NOT_GROUP_MEMBER')) {
+          throw new Error('그룹 멤버만 곡을 추가할 수 있습니다.');
+        }
+        if (message.includes('NOT_AUTHENTICATED')) {
+          throw new Error('로그인이 필요합니다.');
+        }
+        throw new Error(message);
+      }
+
+      await refreshGroupDetail(groupId);
     },
-    [topSongs]
+    [refreshGroupDetail, supabase, topSongs]
   );
 
   const addSongToGroups = useCallback(
-    (songId: string, groupIds: string[]) => {
-      setGroupDetails((prev) => {
-        let nextState = prev;
-
-        groupIds.forEach((groupId) => {
-          if (!nextState[groupId]) {
-            const targetGroup = groups.find((group) => group.id === groupId);
-            if (targetGroup) {
-              nextState = {
-                ...nextState,
-                [groupId]: createEmptyDetail(targetGroup),
-              };
-            }
-          }
-        });
-
-        groupIds.forEach((groupId) => {
-          const detail = nextState[groupId];
-          if (!detail) {
-            return;
-          }
-
-          const song = topSongs.find((item) => item.id === songId);
-          if (!song || detail.todaySongs.some((entry) => entry.id === songId)) {
-            return;
-          }
-
-          const updatedDetail: GroupDetail = {
-            ...detail,
-            todaySongs: [
-              ...detail.todaySongs,
-              {
-                id: song.id,
-                title: song.title,
-                artist: song.artistName,
-                album: song.albumName,
-                coverUrl: song.albumCoverUrl,
-                addedBy: 'You',
-                votes: 0,
-                hasUserVoted: false,
-                addedAt: 'Just now',
-              },
-            ],
-          };
-
-          nextState = { ...nextState, [groupId]: updatedDetail };
-        });
-
-        return nextState;
-      });
+    async (songId: string, groupIds: string[]) => {
+      for (const groupId of groupIds) {
+        await addSongToGroup(groupId, songId);
+      }
     },
-    [groups, topSongs]
+    [addSongToGroup]
   );
 
-  const voteForSong = useCallback((groupId: string, songId: string) => {
-    setGroupDetails((prev) => {
-      const detail = prev[groupId];
-      if (!detail) {
-        return prev;
+  const voteForSong = useCallback(
+    async (groupId: string, roundTrackId: string) => {
+      const { error } = await supabase.rpc('vote_for_group_track', {
+        p_group_round_track_id: roundTrackId,
+      });
+
+      if (error) {
+        const message = error.message ?? '투표할 수 없습니다.';
+        if (message.includes('ROUND_NOT_OPEN_FOR_VOTING')) {
+          throw new Error('지금은 투표 시간이 아닙니다.');
+        }
+        if (message.includes('NOT_GROUP_MEMBER')) {
+          throw new Error('그룹 멤버만 투표할 수 있습니다.');
+        }
+        if (message.includes('ROUND_TRACK_NOT_FOUND')) {
+          throw new Error('투표할 곡 정보를 찾을 수 없습니다.');
+        }
+        if (message.includes('NOT_AUTHENTICATED')) {
+          throw new Error('로그인이 필요합니다.');
+        }
+        throw new Error(message);
       }
 
-      const updatedDetail: GroupDetail = {
-        ...detail,
-        todaySongs: detail.todaySongs.map((song) =>
-          song.id === songId ? { ...song, votes: song.votes + 1, hasUserVoted: true } : song
-        ),
-      };
-
-      return { ...prev, [groupId]: updatedDetail };
-    });
-  }, []);
+      await refreshGroupDetail(groupId);
+    },
+    [refreshGroupDetail, supabase]
+  );
 
   const searchSongs = useCallback(
     (query: string) => {
@@ -457,6 +739,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       topSongsError: topTracksError,
       groups,
       getGroupDetail,
+      refreshGroupDetail,
+      isGroupLoading,
       createGroup,
       joinGroup,
       addSongToGroup,
@@ -470,6 +754,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       topTracksError,
       groups,
       getGroupDetail,
+      refreshGroupDetail,
+      isGroupLoading,
       createGroup,
       joinGroup,
       addSongToGroup,

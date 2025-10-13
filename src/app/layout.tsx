@@ -3,9 +3,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import '../styles/globals.css';
 import { AppStateProvider } from './providers/app-state-provider';
 import { Navigation } from '../components/Navigation';
-import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import AuthProvider from './providers/AuthProvider';
+import { createClient } from '@/utils/supabase/server';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -27,7 +26,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = createServerComponentClient({ cookies });
+  const supabase = await createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

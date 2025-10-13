@@ -41,7 +41,7 @@ interface HomePageProps {
   topSongs: Track[];
   topSongsLoading: boolean;
   topSongsError: Error | null;
-  onAddToGroups: (songId: string, groupIds: string[]) => void;
+  onAddToGroups: (songId: string, groupIds: string[]) => Promise<void> | void;
   onViewGroup: (groupId: string) => void;
 }
 
@@ -59,9 +59,8 @@ export function HomePage({
   const [selectedSong, setSelectedSong] = useState<Track | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const useFallbackSongs = topSongsError !== null || (!topSongsLoading && topSongs.length === 0);
   const baseSongs = topSongs;
-  const isLoadingSpotify = topSongsLoading && !useFallbackSongs;
+  const isLoadingSpotify = topSongsLoading;
 
   const handleOpenGroupSelection = (songId: string) => {
     const song = baseSongs.find((s) => s.id === songId);
@@ -71,8 +70,8 @@ export function HomePage({
     }
   };
 
-  const handleAddToGroups = (songId: string, groupIds: string[]) => {
-    onAddToGroups(songId, groupIds);
+  const handleAddToGroups = async (songId: string, groupIds: string[]) => {
+    await onAddToGroups(songId, groupIds);
   };
 
   // Filter songs based on search query
@@ -140,6 +139,12 @@ export function HomePage({
                 <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
                 <h3>Spotify Top Tracks 불러오는 중</h3>
                 <p className="text-muted-foreground">잠시만 기다려 주세요.</p>
+              </>
+            ) : topSongsError ? (
+              <>
+                <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3>Top Tracks를 가져오지 못했습니다</h3>
+                <p className="text-muted-foreground">잠시 후 다시 시도해 주세요.</p>
               </>
             ) : (
               <>

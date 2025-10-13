@@ -9,45 +9,13 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { GroupSongCard } from './GroupSongCard';
 import { AddSongModal } from './AddSongModal';
+import type { GroupDetail } from '@/app/providers/app-state-provider';
 import type { Track } from '@/types/track';
 
-interface GroupSong {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  coverUrl: string;
-  addedBy: string;
-  votes: number;
-  hasUserVoted: boolean;
-  addedAt: string;
-}
-
-interface WinnerSong {
-  id: string;
-  title: string;
-  artist: string;
-  coverUrl: string;
-  votes: number;
-  date: string;
-}
-
-interface GroupData {
-  id: string;
-  name: string;
-  memberCount: number;
-  votingEnds: string;
-  hasVotingEnded: boolean;
-  todaySongs: GroupSong[];
-  songOfTheDay?: WinnerSong;
-  history: WinnerSong[];
-}
-
 interface GroupPageProps {
-  group: GroupData;
-  topSongs: Track[];
-  onVote: (songId: string) => void;
-  onAddSong: (songId: string) => void;
+  group: GroupDetail;
+  onVote: (roundTrackId: string) => Promise<void> | void;
+  onAddSong: (songId: string) => Promise<void> | void;
   onSearchSongs: (query: string) => Track[];
   onGoBack: () => void;
 }
@@ -62,6 +30,12 @@ export function GroupPage({ group, onVote, onAddSong, onSearchSongs, onGoBack }:
     month: 'long',
     day: 'numeric',
   });
+
+  const votingLabel = group.isVotingOpen
+    ? 'Voting Active'
+    : group.status === 'waiting_final'
+      ? 'Finalizing Results'
+      : 'Voting Closed';
 
   return (
     <div className="container mx-auto p-6">
@@ -86,10 +60,10 @@ export function GroupPage({ group, onVote, onAddSong, onSearchSongs, onGoBack }:
           </div>
 
           <div className="text-right">
-            <Badge variant={group.hasVotingEnded ? 'secondary' : 'default'} className="mb-2">
-              {group.hasVotingEnded ? 'Voting Ended' : 'Voting Active'}
+            <Badge variant={group.isVotingOpen ? 'default' : 'secondary'} className="mb-2">
+              {votingLabel}
             </Badge>
-            {!group.hasVotingEnded && (
+            {group.isVotingOpen && group.votingEnds && (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
                 Ends at {group.votingEnds}
@@ -168,7 +142,7 @@ export function GroupPage({ group, onVote, onAddSong, onSearchSongs, onGoBack }:
                   key={song.id}
                   song={song}
                   onVote={onVote}
-                  canVote={!group.hasVotingEnded && !song.hasUserVoted}
+                  canVote={group.isVotingOpen && !song.hasUserVoted}
                   totalVotes={totalVotes}
                 />
               ))}
@@ -222,7 +196,7 @@ export function GroupPage({ group, onVote, onAddSong, onSearchSongs, onGoBack }:
       />
 
       {/* Floating Add Button */}
-      {!group.hasVotingEnded && (
+      {group.isVotingOpen && (
         <Button
           onClick={() => setShowAddModal(true)}
           className="fixed bottom-8 right-8 rounded-full w-14 h-14 shadow-lg"
