@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: musiot-deployment
+  labels:
+    app: musiot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: musiot
+  template:
+    metadata:
+      labels:
+        app: musiot
+    spec:
+      containers:
+        - name: musiot-container
+          image: yongmin01/musiot:latest
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: '100m'
+              memory: '256Mi'
+            limits:
+              cpu: '500m'
+              memory: '512Mi'
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      restartPolicy: Always
