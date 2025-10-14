@@ -59,7 +59,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/musiot-fe:${{ steps.vars.outputs.sha_tag }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/musiot:${{ steps.vars.outputs.sha_tag }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
           platforms: linux/amd64
