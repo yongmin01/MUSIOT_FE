@@ -1,65 +1,56 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Image (ARM Runner)
 
 on:
   push:
     branches:
-      - main # main 브랜치에 push될 때만 실행
+      - main
+  workflow_dispatch:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # ✅ macOS ARM64 self-hosted 러너 사용
+    runs-on: [self-hosted, macOS, ARM64]
 
     steps:
-      # 1️⃣ 코드 체크아웃
+      # 1️⃣ 저장소 체크아웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Node.js 환경 설정 (Next.js 빌드용)
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # 3️⃣ 의존성 설치
-      - name: Install dependencies
-        run: npm ci
-
-      # 4️⃣ Next.js 앱 빌드
-      - name: Build Next.js app
-        run: npm run build
-
-      # 5️⃣ Docker Hub 로그인
+      # 2️⃣ Docker 로그인
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 6️⃣ 커밋 해시 기반 태그 설정
-      - name: Set image tag
-        id: vars
-        run: echo "sha_tag=sha-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      # 7️⃣ Docker buildx 빌더 설정 (캐시 지원)
+      # 3️⃣ Docker Buildx 설정 (이미 mac ARM64 러너라 QEMU 필요 없음)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 8️⃣ 캐시 설정 (GitHub Actions 캐시 사용)
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
+      # 4️⃣ Next.js 앱 빌드 (선택)
+      #    Next.js 빌드는 Dockerfile 내부에서 처리해도 되지만,
+      #    사전 테스트용으로 npm build를 한 번 수행하는 예시
+      - name: Install dependencies and build Next.js app
+        run: |
+          npm ci
+          npm run build
 
-      # 9️⃣ 이미지 빌드 및 푸시 (캐시 사용)
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      # 5️⃣ Docker 이미지 빌드 및 푸시
+      - name: Build and push Docker image (ARM64)
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/musiot:${{ steps.vars.outputs.sha_tag }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
+          tags: |
+            yongmin01/musiot:sha-${{ github.sha }}
+            yongmin01/musiot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 6️⃣ 결과 출력
+      - name: Print pushed image info
+        run: |
+          echo "✅ Successfully pushed image:"
+          echo " - yongmin01/musiot:sha-${{ github.sha }}"
+          echo " - yongmin01/musiot:latest"
