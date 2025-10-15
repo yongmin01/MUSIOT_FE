@@ -64,7 +64,7 @@ export function Navigation() {
         <Link href={'/'}>
           <div className="flex items-center gap-2">
             <Music className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold">MusicVote</h1>
+            <h1 className="text-xl font-semibold">MUSIOT</h1>
           </div>
         </Link>
 
