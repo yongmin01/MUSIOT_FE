@@ -5,6 +5,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - argocd-ingress.yaml
 
 images:
   - name: yongmin01/musiot # Deployment manifest 안의 이미지 이름과 정확히 일치해야 함
