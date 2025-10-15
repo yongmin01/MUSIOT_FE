@@ -8,10 +8,10 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
 spec:
   rules:
-    - host: localhost
+    - host: argocd.local
       http:
         paths:
-          - path: /argocd
+          - path: /
             pathType: Prefix
             backend:
               service:
