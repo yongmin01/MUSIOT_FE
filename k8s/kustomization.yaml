@@ -9,4 +9,4 @@ resources:
 
 images:
   - name: yongmin01/musiot # Deployment manifest 안의 이미지 이름과 정확히 일치해야 함
-    newTag: latest # Image Updater가 이 부분을 자동으로 업데이트함
+    newTag: sha-4e05cd1 # Image Updater가 이 부분을 자동으로 업데이트함
