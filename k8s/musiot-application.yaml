@@ -6,8 +6,9 @@ metadata:
     argocd-image-updater.argoproj.io/git-commit-email: argocd-bot@example.com
     argocd-image-updater.argoproj.io/git-commit-user: argocd-bot
     argocd-image-updater.argoproj.io/image-list: yongmin01/musiot
-    argocd-image-updater.argoproj.io/musiot.update-strategy: latest
     argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/musiot.allow-tags: regexp:^sha-[0-9a-f]+$
+
   creationTimestamp: '2025-10-14T16:46:20Z'
   generation: 221
   name: musiot
