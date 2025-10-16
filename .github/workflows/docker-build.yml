@@ -31,6 +31,9 @@ jobs:
       #    Next.js 빌드는 Dockerfile 내부에서 처리해도 되지만,
       #    사전 테스트용으로 npm build를 한 번 수행하는 예시
       - name: Install dependencies and build Next.js app
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           npm ci
           npm run build
@@ -45,6 +48,9 @@ jobs:
           tags: |
             yongmin01/musiot:sha-${{ github.sha }}
             yongmin01/musiot:latest
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
