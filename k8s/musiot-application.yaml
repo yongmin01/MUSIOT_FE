@@ -10,13 +10,8 @@ metadata:
     argocd-image-updater.argoproj.io/musiot.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/musiot.kustomize.image-name: yongmin01/musiot
-
-  creationTimestamp: '2025-10-14T16:46:20Z'
-  generation: 221
   name: musiot
   namespace: argocd
-  resourceVersion: '51336'
-  uid: 1f94d9b0-f60d-4529-be17-cd822d470702
 spec:
   destination:
     namespace: default
