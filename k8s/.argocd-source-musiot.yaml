@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - yongmin01/musiot=yongmin01/musiot:sha-f9ae0dbc45bb621c2791f3ba1db370959cb16ab5
