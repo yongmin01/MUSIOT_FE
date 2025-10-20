@@ -11,7 +11,7 @@ metadata:
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/musiot.kustomize.image-name: yongmin01/musiot
     argocd-image-updater.argoproj.io/git-commit-message: 'build: automatic update of {{app}} [skip ci]'
-
+    argocd-image-updater.argoproj.io/musiot.platforms: linux/amd64
   name: musiot
   namespace: argocd
 spec:
