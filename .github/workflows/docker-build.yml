@@ -35,7 +35,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # 4️⃣ Docker 이미지 빌드 및 푸시
-      - name: Build and push Docker image (AMD64)
+      - name: Build and push Docker image (ARM64)
         uses: docker/build-push-action@v5
         with:
           context: .
