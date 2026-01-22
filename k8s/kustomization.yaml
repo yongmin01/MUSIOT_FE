@@ -9,4 +9,4 @@ resources:
 
 images:
   - name: yongmin01/musiot
-    newTag: sha-baab5de5d259b55a77357189e231ca3a308a8dff
+    newTag: sha-32efe765f2723fccab25c26dfa6e6d3f8e75c3cd
