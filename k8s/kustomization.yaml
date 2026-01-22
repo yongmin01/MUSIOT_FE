@@ -8,5 +8,5 @@ resources:
   - argocd-ingress.yaml
 
 images:
-  - name: yongmin01/musiot # Deployment manifest 안의 이미지 이름과 정확히 일치해야 함
-    newTag: sha-a3b41bf4255a126221d60fa601b0d456a40f58fd # Image Updater가 이 부분을 자동으로 업데이트함
+  - name: yongmin01/musiot
+    newTag: sha-60ea7a04203b08ad18684e884f99efc05b986cc5
