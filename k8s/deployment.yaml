@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: musiot-container
-          image: yongmin01/musiot:latest
+          image: yongmin01/musiot
           ports:
             - containerPort: 3000
           envFrom:
